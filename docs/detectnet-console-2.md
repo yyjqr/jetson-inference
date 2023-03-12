@@ -22,8 +22,9 @@ These samples are able to detect objects in images, videos, and camera feeds.  F
 First, let's try using the `detectnet` program to locates objects in static images.  In addition to the input/output paths, there are some additional command-line options:
 
 - optional `--network` flag which changes the [detection model](detectnet-console-2.md#pre-trained-detection-models-available) being used (the default is SSD-Mobilenet-v2).
-- optional `--overlay` flag which can be comma-separated combinations of `box`, `labels`, `conf`, and `none`
+- optional `--overlay` flag which can be comma-separated combinations of `box`, `lines`, `labels`, `conf`, and `none`
 	- The default is `--overlay=box,labels,conf` which displays boxes, labels, and confidence values
+	- The `box` option draws filled bounding boxes, while `lines` draws just the unfilled outlines
 - optional `--alpha` value which sets the alpha blending value used during overlay (the default is `120`).
 - optional `--threshold` value which sets the minimum threshold for detection (the default is `0.5`).  
 
@@ -78,24 +79,30 @@ For more info about loading/saving sequences of images, see the [Camera Streamin
 
 ### Processing Video Files
 
-You can also process videos from disk.  There are some test videos found on your Jetson under `/usr/share/visionworks/sources/data`
+You can also process videos from disk.  For more info about loading/saving videos, see [here](aux-streaming.md#video-files).
 
 ``` bash
+# Download test video
+wget https://nvidia.box.com/shared/static/veuuimq6pwvd62p9fresqhrrmfqz0e2f.mp4 -O pedestrians.mp4
+
 # C++
-./detectnet /usr/share/visionworks/sources/data/pedestrians.mp4 images/test/pedestrians_ssd.mp4
+./detectnet pedestrians.mp4 images/test/pedestrians_ssd.mp4
 
 # Python
-./detectnet.py /usr/share/visionworks/sources/data/pedestrians.mp4 images/test/pedestrians_ssd.mp4
+./detectnet.py pedestrians.mp4 images/test/pedestrians_ssd.mp4
 ```
 
 <a href="https://www.youtube.com/watch?v=EbTyTJS9jOQ" target="_blank"><img src=https://github.com/dusty-nv/jetson-inference/raw/dev/docs/images/detectnet-ssd-pedestrians-video.jpg width="750"></a>
 
 ``` bash
+# Download test video
+wget https://nvidia.box.com/shared/static/i5i81mkd9wdh4j7wx04th961zks0lfh9.avi -O parking.avi
+
 # C++
-./detectnet /usr/share/visionworks/sources/data/parking.avi images/test/parking_ssd.avi
+./detectnet parking.avi images/test/parking_ssd.avi
 
 # Python
-./detectnet.py /usr/share/visionworks/sources/data/parking.avi images/test/parking_ssd.avi
+./detectnet.py parking.avi images/test/parking_ssd.avi
 ```
 
 <a href="https://www.youtube.com/watch?v=iB86W-kloPE" target="_blank"><img src=https://github.com/dusty-nv/jetson-inference/raw/dev/docs/images/detectnet-ssd-parking-video.jpg width="585"></a>

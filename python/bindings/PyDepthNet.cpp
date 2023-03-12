@@ -102,8 +102,10 @@ static int PyDepthNet_Init( PyDepthNet_Object* self, PyObject *args, PyObject *k
 		}
 
 		// load the network using (argc, argv)
+		Py_BEGIN_ALLOW_THREADS
 		self->net = depthNet::Create(argc, argv);
-
+		Py_END_ALLOW_THREADS
+		
 		// free the arguments array
 		free(argv);
 	}
@@ -122,7 +124,9 @@ static int PyDepthNet_Init( PyDepthNet_Object* self, PyObject *args, PyObject *k
 		}
 		
 		// load the built-in network
+		Py_BEGIN_ALLOW_THREADS
 		self->net = depthNet::Create(networkType);
+		Py_END_ALLOW_THREADS
 	}
 
 	// confirm the network loaded
@@ -211,10 +215,15 @@ static PyObject* PyDepthNet_Process( PyDepthNet_Object* self, PyObject* args, Py
 			return NULL;
 		}
 		
-		const bool result = self->net->Process(input_img->base.ptr, input_img->width, input_img->height, input_img->format,
-									    output_img->base.ptr, output_img->width, output_img->height, output_img->format,
-									    colormap, filterMode);
-									    
+		bool result = false;
+		Py_BEGIN_ALLOW_THREADS
+		
+		result = self->net->Process(input_img->base.ptr, input_img->width, input_img->height, input_img->format,
+							   output_img->base.ptr, output_img->width, output_img->height, output_img->format,
+							   colormap, filterMode);
+							   
+		Py_END_ALLOW_THREADS
+		
 		if( !result )
 		{
 			PyErr_SetString(PyExc_Exception, LOG_PY_INFERENCE "depthNet.Process() encountered an error processing the image");
@@ -223,8 +232,11 @@ static PyObject* PyDepthNet_Process( PyDepthNet_Object* self, PyObject* args, Py
 	}
 	else
 	{
-		const bool result = self->net->Process(input_img->base.ptr, input_img->width, input_img->height, input_img->format);
-									    
+		bool result = false;
+		Py_BEGIN_ALLOW_THREADS
+		result = self->net->Process(input_img->base.ptr, input_img->width, input_img->height, input_img->format);
+		Py_END_ALLOW_THREADS
+				
 		if( !result )
 		{
 			PyErr_SetString(PyExc_Exception, LOG_PY_INFERENCE "depthNet.Process() encountered an error processing the image");
@@ -279,15 +291,17 @@ static PyObject* PyDepthNet_Visualize( PyDepthNet_Object* self, PyObject* args, 
 		return NULL;
 	}
 		
-	const bool result = self->net->Visualize(output_img->base.ptr, output_img->width, output_img->height, output_img->format,
-								      colormap, filterMode);
-								    
+	bool result = false;
+	Py_BEGIN_ALLOW_THREADS
+	result = self->net->Visualize(output_img->base.ptr, output_img->width, output_img->height, output_img->format, colormap, filterMode);
+	Py_END_ALLOW_THREADS
+	
 	if( !result )
 	{
 		PyErr_SetString(PyExc_Exception, LOG_PY_INFERENCE "depthNet.Visualize() encountered an error processing the image");
 		return NULL;
 	}
-
+	
 	Py_RETURN_NONE;
 }
 

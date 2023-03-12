@@ -18,6 +18,10 @@ if(BUILD_EXPERIMENTAL)
 
 	add_subdirectory(experimental/superres-console)
 
+	add_subdirectory(actionnet)
+	add_subdirectory(featurenet)
+	add_subdirectory(backgroundnet)
+
 	if(HAS_OPENCV)
 		add_subdirectory(experimental/homography-console)
 		add_subdirectory(experimental/homography-camera)

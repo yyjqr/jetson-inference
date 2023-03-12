@@ -670,11 +670,14 @@ static PyObject* PyObjectPose_FindKeypoint( PyObjectPose_Object* self, PyObject 
 		return NULL;
 	}
 
-	// parse arguments
+	// this function accepts either the keypoint ID (int) or the name (string)
+	// in the string case, it will just look up the keypoint ID for you
 	int id = 0;
 
 	if( !PyArg_ParseTuple(args, "i", &id) )
 	{
+		PyErr_Clear();  // PyArg_ParseTuple will throw an exception
+		
 		if( self->net != NULL )
 		{
 			const char* name = NULL;
@@ -863,8 +866,10 @@ static int PyPoseNet_Init( PyPoseNet_Object* self, PyObject *args, PyObject *kwd
 		}
 
 		// load the network using (argc, argv)
+		Py_BEGIN_ALLOW_THREADS
 		self->net = poseNet::Create(argc, argv);
-
+		Py_END_ALLOW_THREADS
+		
 		// set the threshold
 		self->net->SetThreshold(threshold);
 		
@@ -886,7 +891,9 @@ static int PyPoseNet_Init( PyPoseNet_Object* self, PyObject *args, PyObject *kwd
 		}
 		
 		// load the built-in network
+		Py_BEGIN_ALLOW_THREADS
 		self->net = poseNet::Create(networkType, threshold);
+		Py_END_ALLOW_THREADS
 	}
 
 	// confirm the network loaded
@@ -954,7 +961,12 @@ static PyObject* PyPoseNet_Process( PyPoseNet_Object* self, PyObject* args, PyOb
 	// run the pose estimation
 	std::vector<poseNet::ObjectPose> poses;
 
-	if( !self->net->Process(img->base.ptr, img->width, img->height, img->format, poses, poseNet::OverlayFlagsFromStr(overlay)) )
+	bool result = false;
+	Py_BEGIN_ALLOW_THREADS
+	result = self->net->Process(img->base.ptr, img->width, img->height, img->format, poses, poseNet::OverlayFlagsFromStr(overlay));
+	Py_END_ALLOW_THREADS
+	
+	if( !result )
 	{
 		PyErr_SetString(PyExc_Exception, LOG_PY_INFERENCE "poseNet.Process() encountered an error processing the image");
 		return NULL;
@@ -1063,14 +1075,21 @@ static PyObject* PyPoseNet_Overlay( PyPoseNet_Object* self, PyObject* args, PyOb
 	}
 
 	// perform the overlay operation
-	if( !self->net->Overlay(input_img->base.ptr, output_img->base.ptr, 
+	bool result = false;
+	Py_BEGIN_ALLOW_THREADS
+	
+	result = self->net->Overlay(input_img->base.ptr, output_img->base.ptr, 
 					    input_img->width, input_img->height, input_img->format, 
-					    objectPoses, poseNet::OverlayFlagsFromStr(overlay)) ) 
+					    objectPoses, poseNet::OverlayFlagsFromStr(overlay));
+
+	Py_END_ALLOW_THREADS
+	
+	if( !result ) 
 	{
 		PyErr_SetString(PyExc_Exception, LOG_PY_INFERENCE "poseNet.Overlay() encountered an error");
 		return NULL;
 	}
-
+	
 	Py_RETURN_NONE;
 }
 

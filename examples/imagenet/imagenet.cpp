@@ -91,7 +91,7 @@ int main( int argc, char** argv )
 	if( !input )
 	{
 		LogError("imagenet:  failed to create input stream\n");
-		return 0;
+		return 1;
 	}
 
 
@@ -112,7 +112,7 @@ int main( int argc, char** argv )
 	if( !font )
 	{
 		LogError("imagenet:  failed to load font for overlay\n");
-		return 0;
+		return 1;
 	}
 
 
@@ -124,7 +124,7 @@ int main( int argc, char** argv )
 	if( !net )
 	{
 		LogError("imagenet:  failed to initialize imageNet\n");
-		return 0;
+		return 1;
 	}
 
 
@@ -154,14 +154,11 @@ int main( int argc, char** argv )
 		{
 			LogVerbose("imagenet:  %2.5f%% class #%i (%s)\n", confidence * 100.0f, img_class, net->GetClassDesc(img_class));	
 
-			if( font != NULL )
-			{
-				char str[256];
-				sprintf(str, "%05.2f%% %s", confidence * 100.0f, net->GetClassDesc(img_class));
-	
-				font->OverlayText(image, input->GetWidth(), input->GetHeight(),
-						        str, 5, 5, make_float4(255, 255, 255, 255), make_float4(0, 0, 0, 100));
-			}
+			// overlay class label onto original image
+			char str[256];
+			sprintf(str, "%05.2f%% %s", confidence * 100.0f, net->GetClassDesc(img_class));
+			font->OverlayText(image, input->GetWidth(), input->GetHeight(),
+						   str, 5, 5, make_float4(255, 255, 255, 255), make_float4(0, 0, 0, 100));
 		}	
 
 		// render outputs

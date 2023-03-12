@@ -462,8 +462,7 @@ typedef struct {
 
 #define DOC_DETECTNET "Object Detection DNN - locates objects in an image\n\n" \
 				  "Examples (jetson-inference/python/examples)\n" \
-                      "     detectnet-console.py\n" \
-				  "     detectnet-camera.py\n\n" \
+                      "     detectnet.py\n\n" \
 				  "__init__(...)\n" \
 				  "     Loads an object detection model.\n\n" \
 				  "     Parameters:\n" \
@@ -473,8 +472,14 @@ typedef struct {
 				  "                         see below for available options.\n\n" \
 				  "       threshold (float) -- minimum detection threshold.\n" \
 				  "                            default value is 0.5\n\n" \
+				  "     Extended parameters for loading custom models:\n" \
+				  "       model (string) -- path to self-trained ONNX model to load.\n\n" \
+				  "       labels (string) -- path to labels.txt file (optional)\n\n" \
+				  "       colors (string) -- path to colors.txt file (optional)\n\n" \
+				  "       input_blob (string) -- name of the input layer of the model.\n\n" \
+				  "       output_cvg (string) -- name of the output coverage/confidence layer.\n\n" \
+				  "       output_bbox (string) -- name of the output bounding boxes layer.\n\n" \
  				  DETECTNET_USAGE_STRING
-
 
 // Init
 static int PyDetectNet_Init( PyDetectNet_Object* self, PyObject *args, PyObject *kwds )
@@ -482,13 +487,21 @@ static int PyDetectNet_Init( PyDetectNet_Object* self, PyObject *args, PyObject 
 	LogDebug(LOG_PY_INFERENCE "PyDetectNet_Init()\n");
 	
 	// parse arguments
-	PyObject* argList     = NULL;
-	const char* network   = "ssd-mobilenet-v2";
-	float threshold       = DETECTNET_DEFAULT_THRESHOLD;
+	PyObject* argList = NULL;
 
-	static char* kwlist[] = {"network", "argv", "threshold", NULL};
+	const char* network     = "ssd-mobilenet-v2";
+	const char* model       = NULL;
+	const char* labels      = NULL;
+	const char* colors      = NULL;
+	const char* input_blob  = DETECTNET_DEFAULT_INPUT;
+	const char* output_cvg  = DETECTNET_DEFAULT_COVERAGE;
+	const char* output_bbox = DETECTNET_DEFAULT_BBOX;
+	
+	float threshold = DETECTNET_DEFAULT_CONFIDENCE_THRESHOLD;
+	
+	static char* kwlist[] = {"network", "argv", "threshold", "model", "labels", "colors", "input_blob", "output_cvg", "output_bbox", NULL};
 
-	if( !PyArg_ParseTupleAndKeywords(args, kwds, "|sOf", kwlist, &network, &argList, &threshold))
+	if( !PyArg_ParseTupleAndKeywords(args, kwds, "|sOfssssss", kwlist, &network, &argList, &threshold, &model, &labels, &colors, &input_blob, &output_cvg, &output_bbox))
 	{
 		PyErr_SetString(PyExc_Exception, LOG_PY_INFERENCE "detectNet.__init()__ failed to parse args tuple");
 		return -1;
@@ -530,11 +543,22 @@ static int PyDetectNet_Init( PyDetectNet_Object* self, PyObject *args, PyObject 
 		}
 
 		// load the network using (argc, argv)
+		Py_BEGIN_ALLOW_THREADS
 		self->net = detectNet::Create(argc, argv);
+		Py_END_ALLOW_THREADS
 
 		// free the arguments array
 		free(argv);
 	}
+	else if( model != NULL )
+	{
+		LogVerbose(LOG_PY_INFERENCE "detectNet loading custom model '%s'\n", model);
+		
+		// load the network using custom model parameters
+		Py_BEGIN_ALLOW_THREADS
+		self->net = detectNet::Create(NULL, model, 0.0f, labels, colors, threshold, input_blob, output_cvg, output_bbox);
+		Py_END_ALLOW_THREADS
+	}	
 	else
 	{
 		LogVerbose(LOG_PY_INFERENCE "detectNet loading build-in network '%s'\n", network);
@@ -550,7 +574,9 @@ static int PyDetectNet_Init( PyDetectNet_Object* self, PyObject *args, PyObject 
 		}
 		
 		// load the built-in network
+		Py_BEGIN_ALLOW_THREADS
 		self->net = detectNet::Create(networkType, threshold);
+		Py_END_ALLOW_THREADS
 	}
 
 	// confirm the network loaded
@@ -584,7 +610,7 @@ static void PyDetectNet_Dealloc( PyDetectNet_Object* self )
 				 "  image   (capsule) -- CUDA memory capsule\n" \
 				 "  width   (int)  -- width of the image (in pixels)\n" \
 				 "  height  (int)  -- height of the image (in pixels)\n" \
-				 "  overlay (str)  -- combination of box,labels,none flags (default is 'box')\n\n" \
+				 "  overlay (str)  -- combination of box,lines,labels,conf,none flags (default is 'box,labels,conf')\n\n" \
 				 "Returns:\n" \
 				 "  [Detections] -- list containing the detected objects (see detectNet.Detection)"
 
@@ -624,9 +650,12 @@ static PyObject* PyDetectNet_Detect( PyDetectNet_Object* self, PyObject* args, P
 
 	// run the object detection
 	detectNet::Detection* detections = NULL;
-
-	const int numDetections = self->net->Detect(ptr, width, height, format, &detections, detectNet::OverlayFlagsFromStr(overlay));
-
+	int numDetections = 0;
+	
+	Py_BEGIN_ALLOW_THREADS
+	numDetections = self->net->Detect(ptr, width, height, format, &detections, detectNet::OverlayFlagsFromStr(overlay));
+	Py_END_ALLOW_THREADS
+	
 	if( numDetections < 0 )
 	{
 		PyErr_SetString(PyExc_Exception, LOG_PY_INFERENCE "detectNet.Detect() encountered an error classifying the image");
@@ -659,7 +688,7 @@ static PyObject* PyDetectNet_Detect( PyDetectNet_Object* self, PyObject* args, P
 				 "  [Detections]   -- list containing the detected objects (see detectNet.Detection)" \
 				 "  width   (int)  -- width of the image (in pixels)\n" \
 				 "  height  (int)  -- height of the image (in pixels)\n" \
-				 "  overlay (str)  -- combination of box,labels,none flags (default is 'box')\n\n" \
+				 "  overlay (str)  -- combination of box,lines,labels,conf,none flags (default is 'box,labels,conf')\n\n" \
 				 "Returns:\n" \
 				 "  None"
 
@@ -729,9 +758,16 @@ static PyObject* PyDetectNet_Overlay( PyDetectNet_Object* self, PyObject* args, 
 
 	if( detections_ptr.size() > 0 ) 
 	{
-		if( !self->net->Overlay(input_ptr, output_ptr, width, height, format, 
+		bool result = false;
+		Py_BEGIN_ALLOW_THREADS
+		
+		result = self->net->Overlay(input_ptr, output_ptr, width, height, format, 
 						    detections_ptr.data(), detections_ptr.size(), 
-						    detectNet::OverlayFlagsFromStr(overlay)) ) 
+						    detectNet::OverlayFlagsFromStr(overlay));
+				
+		Py_END_ALLOW_THREADS
+		
+		if( !result ) 
 		{
 			PyErr_SetString(PyExc_Exception, LOG_PY_INFERENCE "detectNet.Overlay() encountered an error");
 			return NULL;
@@ -742,13 +778,13 @@ static PyObject* PyDetectNet_Overlay( PyDetectNet_Object* self, PyObject* args, 
 }
 
 
-#define DOC_GET_THRESHOLD  "Return the minimum detection threshold.\n\n" \
-				 	  "Parameters:  (none)\n\n" \
-					  "Returns:\n" \
-					  "  (float) -- the threshold for detection"
+#define DOC_GET_CONFIDENCE_THRESHOLD  "Return the minimum detection threshold.\n\n" \
+							   "Parameters:  (none)\n\n" \
+							   "Returns:\n" \
+							   "  (float) -- the threshold for detection"
 
-// GetThreshold
-static PyObject* PyDetectNet_GetThreshold( PyDetectNet_Object* self )
+// GetConfidenceThreshold
+static PyObject* PyDetectNet_GetConfidenceThreshold( PyDetectNet_Object* self )
 {
 	if( !self || !self->net )
 	{
@@ -756,17 +792,17 @@ static PyObject* PyDetectNet_GetThreshold( PyDetectNet_Object* self )
 		return NULL;
 	}
 
-	return PyFloat_FromDouble(self->net->GetThreshold());
+	return PyFloat_FromDouble(self->net->GetConfidenceThreshold());
 }
 
 
-#define DOC_SET_THRESHOLD  "Return the minimum detection threshold.\n\n" \
-				 	  "Parameters:\n" \
-					  "  (float) -- detection threshold\n\n" \
-					  "Returns:  (none)"
+#define DOC_SET_CONFIDENCE_THRESHOLD  "Set the minimum detection threshold.\n\n" \
+				 	             "Parameters:\n" \
+					             "  (float) -- detection threshold\n\n" \
+					             "Returns:  (none)"
 
-// SetThreshold
-PyObject* PyDetectNet_SetThreshold( PyDetectNet_Object* self, PyObject* args )
+// SetConfidenceThreshold
+PyObject* PyDetectNet_SetConfidenceThreshold( PyDetectNet_Object* self, PyObject* args )
 {
 	if( !self || !self->net )
 	{
@@ -778,11 +814,56 @@ PyObject* PyDetectNet_SetThreshold( PyDetectNet_Object* self, PyObject* args )
 
 	if( !PyArg_ParseTuple(args, "f", &threshold) )
 	{
-		PyErr_SetString(PyExc_Exception, LOG_PY_INFERENCE "detectNet.SetThreshold() failed to parse arguments");
+		PyErr_SetString(PyExc_Exception, LOG_PY_INFERENCE "detectNet.SetConfidenceThreshold() failed to parse arguments");
 		return NULL;
 	}
 		
-	self->net->SetThreshold(threshold);
+	self->net->SetConfidenceThreshold(threshold);
+	Py_RETURN_NONE;
+}
+
+
+#define DOC_GET_CLUSTERING_THRESHOLD  "Return the overlapping area % threshold for clustering.\n\n" \
+							   "Parameters:  (none)\n\n" \
+							   "Returns:\n" \
+							   "  (float) -- the overlapping area % threshold for merging bounding boxes"
+
+// GetClusteringThreshold
+static PyObject* PyDetectNet_GetClusteringThreshold( PyDetectNet_Object* self )
+{
+	if( !self || !self->net )
+	{
+		PyErr_SetString(PyExc_Exception, LOG_PY_INFERENCE "detectNet invalid object instance");
+		return NULL;
+	}
+
+	return PyFloat_FromDouble(self->net->GetClusteringThreshold());
+}
+
+
+#define DOC_SET_CLUSTERING_THRESHOLD  "Set the overlapping area % threshold for clustering.\n\n" \
+				 	             "Parameters:\n" \
+					             "  (float) -- the overlapping area % threshold for merging bounding boxes\n\n" \
+					             "Returns:  (none)"
+
+// SetClusteringThreshold
+PyObject* PyDetectNet_SetClusteringThreshold( PyDetectNet_Object* self, PyObject* args )
+{
+	if( !self || !self->net )
+	{
+		PyErr_SetString(PyExc_Exception, LOG_PY_INFERENCE "detectNet invalid object instance");
+		return NULL;
+	}
+	
+	float threshold = 0.0f;
+
+	if( !PyArg_ParseTuple(args, "f", &threshold) )
+	{
+		PyErr_SetString(PyExc_Exception, LOG_PY_INFERENCE "detectNet.SetClusteringThreshold() failed to parse arguments");
+		return NULL;
+	}
+		
+	self->net->SetClusteringThreshold(threshold);
 	Py_RETURN_NONE;
 }
 
@@ -907,6 +988,41 @@ PyObject* PyDetectNet_SetOverlayAlpha( PyDetectNet_Object* self, PyObject* args,
 }
 
 
+#define DOC_SET_LINE_WIDTH "Set the line width used during overlay when 'lines' mode is used\n\n" \
+				 	  "Parameters:\n" \
+					  "  width (float) -- desired line width, in pixels\n" \
+					  "Returns:  (none)"
+
+// SetOverlayAlpha
+PyObject* PyDetectNet_SetLineWidth( PyDetectNet_Object* self, PyObject* args, PyObject *kwds )
+{
+	if( !self || !self->net )
+	{
+		PyErr_SetString(PyExc_Exception, LOG_PY_INFERENCE "detectNet invalid object instance");
+		return NULL;
+	}
+	
+	float width = 0.0f;
+	static char* kwlist[] = {"width", NULL};
+
+	if( !PyArg_ParseTupleAndKeywords(args, kwds, "f", kwlist, &width) )
+	{
+		PyErr_SetString(PyExc_Exception, LOG_PY_INFERENCE "detectNet.SetLineWidth() failed to parse arguments");
+		return NULL;
+	}
+		
+	if( width <= 0.0f )
+	{
+		PyErr_SetString(PyExc_Exception, LOG_PY_INFERENCE "detectNet.SetLineWidth() -- provided value is out-of-range");
+		return NULL;
+	}
+
+	self->net->SetLineWidth(width);
+
+	Py_RETURN_NONE;
+}
+
+
 #define DOC_USAGE_STRING     "Return the command line parameters accepted by __init__()\n\n" \
 					    "Parameters:  (none)\n\n" \
 					    "Returns:\n" \
@@ -928,12 +1044,17 @@ static PyMethodDef pyDetectNet_Methods[] =
 {
 	{ "Detect", (PyCFunction)PyDetectNet_Detect, METH_VARARGS|METH_KEYWORDS, DOC_DETECT},
 	{ "Overlay", (PyCFunction)PyDetectNet_Overlay, METH_VARARGS|METH_KEYWORDS, DOC_OVERLAY},
-	{ "GetThreshold", (PyCFunction)PyDetectNet_GetThreshold, METH_NOARGS, DOC_GET_THRESHOLD},
-	{ "SetThreshold", (PyCFunction)PyDetectNet_SetThreshold, METH_VARARGS, DOC_SET_THRESHOLD},     
 	{ "GetNumClasses", (PyCFunction)PyDetectNet_GetNumClasses, METH_NOARGS, DOC_GET_NUM_CLASSES},
 	{ "GetClassDesc", (PyCFunction)PyDetectNet_GetClassDesc, METH_VARARGS, DOC_GET_CLASS_DESC},
 	{ "GetClassSynset", (PyCFunction)PyDetectNet_GetClassSynset, METH_VARARGS, DOC_GET_CLASS_SYNSET},
+	{ "GetThreshold", (PyCFunction)PyDetectNet_GetConfidenceThreshold, METH_NOARGS, DOC_GET_CONFIDENCE_THRESHOLD},
+	{ "SetThreshold", (PyCFunction)PyDetectNet_SetConfidenceThreshold, METH_VARARGS, DOC_SET_CONFIDENCE_THRESHOLD}, 
+	{ "GetConfidenceThreshold", (PyCFunction)PyDetectNet_GetConfidenceThreshold, METH_NOARGS, DOC_GET_CONFIDENCE_THRESHOLD},
+	{ "SetConfidenceThreshold", (PyCFunction)PyDetectNet_SetConfidenceThreshold, METH_VARARGS, DOC_SET_CONFIDENCE_THRESHOLD}, 
+	{ "GetClusteringThreshold", (PyCFunction)PyDetectNet_GetClusteringThreshold, METH_NOARGS, DOC_GET_CLUSTERING_THRESHOLD},
+	{ "SetClusteringThreshold", (PyCFunction)PyDetectNet_SetClusteringThreshold, METH_VARARGS, DOC_SET_CLUSTERING_THRESHOLD},
 	{ "SetOverlayAlpha", (PyCFunction)PyDetectNet_SetOverlayAlpha, METH_VARARGS|METH_KEYWORDS, DOC_SET_OVERLAY_ALPHA},
+	{ "SetLineWidth", (PyCFunction)PyDetectNet_SetLineWidth, METH_VARARGS|METH_KEYWORDS, DOC_SET_LINE_WIDTH},
 	{ "Usage", (PyCFunction)PyDetectNet_Usage, METH_NOARGS|METH_STATIC, DOC_USAGE_STRING},	
 	{NULL}  /* Sentinel */
 };

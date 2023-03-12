@@ -33,7 +33,7 @@ FROM ${BASE_IMAGE}
 ENV DEBIAN_FRONTEND=noninteractive
 ENV SHELL /bin/bash
 
-WORKDIR jetson-inference
+WORKDIR /jetson-inference
 
         
 #
@@ -43,17 +43,20 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
             cmake \
 		  nano \
+		  lsb-release \
+		  gstreamer1.0-tools \
+		  gstreamer1.0-libav \
+		  gstreamer1.0-rtsp \
+		  gstreamer1.0-plugins-rtp \
+		  gstreamer1.0-plugins-good \
+		  gstreamer1.0-plugins-bad \
+		  gstreamer1.0-plugins-ugly \
     && rm -rf /var/lib/apt/lists/*
     
 # pip dependencies for pytorch-ssd
 RUN pip3 install --verbose --upgrade Cython && \
-    pip3 install --verbose boto3 pandas
+    pip3 install --verbose boto3 pandas tensorboard
 
-# alias python3 -> python
-RUN rm /usr/bin/python && \
-    ln -s /usr/bin/python3 /usr/bin/python && \
-    ln -s /usr/bin/pip3 /usr/bin/pip
-    
     
 # 
 # install OpenCV (with CUDA)
@@ -61,22 +64,9 @@ RUN rm /usr/bin/python && \
 ARG OPENCV_URL=https://nvidia.box.com/shared/static/5v89u6g5rb62fpz4lh0rz531ajo2t5ef.gz
 ARG OPENCV_DEB=OpenCV-4.5.0-aarch64.tar.gz
 
-RUN apt-get purge -y '*opencv*' || echo "previous OpenCV installation not found" && \
-    mkdir opencv && \
-    cd opencv && \
-    wget --quiet --show-progress --progress=bar:force:noscroll --no-check-certificate ${OPENCV_URL} -O ${OPENCV_DEB} && \
-    tar -xzvf ${OPENCV_DEB} && \
-    dpkg -i --force-depends *.deb && \
-    apt-get update && \
-    apt-get install -y -f --no-install-recommends && \
-    dpkg -i *.deb && \
-    rm -rf /var/lib/apt/lists/* && \
-    apt-get clean && \
-    cd ../ && \
-    rm -rf opencv && \
-    cp -r /usr/include/opencv4 /usr/local/include/opencv4 && \
-    cp -r /usr/lib/python3.6/dist-packages/cv2 /usr/local/lib/python3.6/dist-packages/cv2
-    
+COPY docker/containers/scripts/opencv_install.sh /tmp/opencv_install.sh
+RUN cd /tmp && ./opencv_install.sh ${OPENCV_URL} ${OPENCV_DEB}
+
     
 #
 # copy source
