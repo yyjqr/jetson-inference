@@ -26,7 +26,8 @@
 #include "detectNet.h"
 
 #include <signal.h>
-
+#include <iostream>
+#include <string>
 
 #ifdef HEADLESS
 	#define IS_HEADLESS() "headless"	// run without display
@@ -85,8 +86,10 @@ int main( int argc, char** argv )
 	/*
 	 * create input stream
 	 */
-	videoSource* input = videoSource::Create(cmdLine, ARG_POSITION(0));
-
+	 videoSource* input = videoSource::Create(cmdLine, ARG_POSITION(0));
+        //const char* URI="v4l2:///dev/video0";
+        //videoSource* input = videoSource::Create(URI);
+        std::cout <<"video input*"<<input->GetResource().string.c_str()<<std::endl;
 	if( !input )
 	{
 		LogError("detectnet:  failed to create input stream\n");
@@ -98,8 +101,13 @@ int main( int argc, char** argv )
 	 * create output stream
 	 */
 	videoOutput* output = videoOutput::Create(cmdLine, ARG_POSITION(1));
-	
-	if( !output )
+	std::cout <<"test videoOutput*"<< output->GetResource().string.c_str()<<std::endl;
+	std::string filePath = output->GetResource().string;
+        std::string::size_type  filePos =filePath.find("file://");
+        //std::string validFile = filePath.substr(filePos,strlen(filePath)-1);
+        std::string validFile = filePath.substr(filePos+7);
+        std::cout <<"test filePos:"<< filePos <<"\n file:" << validFile<<std::endl;
+        if( !output )
 		LogError("detectnet:  failed to create output stream\n");	
 	
 
@@ -144,12 +152,30 @@ int main( int argc, char** argv )
 		if( numDetections > 0 )
 		{
 			LogVerbose("%i objects detected\n", numDetections);
-		
+		        char cmd_buf[150]={0};
+                        sprintf(cmd_buf,"sendDetectImg -i %s",validFile.c_str());
+                        //int ret=system("sendDetectImg");
+                       /* if (detections[0].Confidence >0.7 &&numDetections > 1){
+                        int ret=system(cmd_buf);
+                        LogVerbose("call system cmd,confidence:%f, ret is%d\n\n",detections[0].Confidence, ret);
+                        sleepTime(12,0); //6 seconds
+                        }*/
+                        //ret=system("ls -alh");
+                        //LogVerbose("call system cmd \'ls -alh\',ret is%d\n\n",ret);
 			for( int n=0; n < numDetections; n++ )
 			{
 				LogVerbose("detected obj %i  class #%u (%s)  confidence=%f\n", n, detections[n].ClassID, net->GetClassDesc(detections[n].ClassID), detections[n].Confidence);
 				LogVerbose("bounding box %i  (%f, %f)  (%f, %f)  w=%f  h=%f\n", n, detections[n].Left, detections[n].Top, detections[n].Right, detections[n].Bottom, detections[n].Width(), detections[n].Height()); 
-			}
+                               if(numDetections > 0)
+                                if((detections[0].Confidence > 0.9)|| \
+                                  (numDetections > 1 && detections[n].ClassID == 1 &&detections[n].Confidence > 0.65)) 
+                                {
+					// sendEmail. classID =1 ,people  //1210
+                                    int ret=system(cmd_buf);
+                                    LogVerbose("call system cmd,detect confidence:%f, ret is%d\n\n",detections[0].Confidence, ret);
+                                    sleepTime(12,0);
+				}
+                         }
 		}	
 
 		// render outputs
