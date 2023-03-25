@@ -40,7 +40,7 @@ typedef struct {
 				 "Examples (jetson-inference/python/examples)\n" \
                      "     depthnet.py\n\n" \
 				 "__init__(...)\n" \
-				 "     Loads an semantic segmentation model.\n\n" \
+				 "     Loads a mono depth estimation model.\n\n" \
 				 "     Parameters:\n" \
 				 "       network (string) -- name of a built-in network to use,\n" \
 				 "                           see below for available options.\n\n" \
@@ -60,16 +60,12 @@ static int PyDepthNet_Init( PyDepthNet_Object* self, PyObject *args, PyObject *k
 	static char* kwlist[] = {"network", "argv", NULL};
 
 	if( !PyArg_ParseTupleAndKeywords(args, kwds, "|sO", kwlist, &network, &argList))
-	{
-		PyErr_SetString(PyExc_Exception, LOG_PY_INFERENCE "depthNet.__init()__ failed to parse arguments");
-		LogError(LOG_PY_INFERENCE "depthNet.__init()__ failed to parse arguments\n");
 		return -1;
-	}
-    
+
 	// determine whether to use argv or built-in network
 	if( argList != NULL && PyList_Check(argList) && PyList_Size(argList) > 0 )
 	{
-		LogVerbose(LOG_PY_INFERENCE "depthNet loading network using argv command line params\n");
+		LogDebug(LOG_PY_INFERENCE "depthNet loading network using argv command line params\n");
 
 		// parse the python list into char**
 		const size_t argc = PyList_Size(argList);
@@ -111,21 +107,11 @@ static int PyDepthNet_Init( PyDepthNet_Object* self, PyObject *args, PyObject *k
 	}
 	else
 	{
-		LogVerbose(LOG_PY_INFERENCE "depthNet loading build-in network '%s'\n", network);
-		
-		// parse the selected built-in network
-		depthNet::NetworkType networkType = depthNet::NetworkTypeFromStr(network);
-		
-		if( networkType == depthNet::CUSTOM )
-		{
-			PyErr_SetString(PyExc_Exception, LOG_PY_INFERENCE "depthNet invalid built-in network was requested");
-			LogError(LOG_PY_INFERENCE "depthNet invalid built-in network was requested ('%s')\n", network);
-			return -1;
-		}
+		LogDebug(LOG_PY_INFERENCE "depthNet loading build-in network '%s'\n", network);
 		
 		// load the built-in network
 		Py_BEGIN_ALLOW_THREADS
-		self->net = depthNet::Create(networkType);
+		self->net = depthNet::Create(network, DEFAULT_MAX_BATCH_SIZE);
 		Py_END_ALLOW_THREADS
 	}
 
@@ -133,13 +119,12 @@ static int PyDepthNet_Init( PyDepthNet_Object* self, PyObject *args, PyObject *k
 	if( !self->net )
 	{
 		PyErr_SetString(PyExc_Exception, LOG_PY_INFERENCE "depthNet failed to load network");
-		LogError(LOG_PY_INFERENCE "depthNet failed to load network\n");
 		return -1;
 	}
 
 	// create an image capsule for the depth field
 	self->depthField = PyCUDA_RegisterImage(self->net->GetDepthField(), self->net->GetDepthFieldWidth(), self->net->GetDepthFieldHeight(),
-									IMAGE_GRAY32F, true, false);
+									IMAGE_GRAY32F, 0, true, false);
 	
 	self->base.net = self->net;
 	return 0;
@@ -162,10 +147,10 @@ static void PyDepthNet_Dealloc( PyDepthNet_Object* self )
 #define DOC_PROCESS  "Compute the depth field from a monocular RGB/RGBA image.\n" \
                      "The results can also be visualized if output image is provided.\n\n" \
 				 "Parameters:\n" \
-				 "  input  (capsule) -- CUDA memory capsule (input image)\n" \
-				 "  output (capsule) -- CUDA memory capsule (optional output image)\n" \
+				 "  input  (capsule)  -- CUDA memory capsule (input image)\n" \
+				 "  output (capsule)  -- CUDA memory capsule (optional output image)\n" \
 				 "  colormap (string) -- colormap name (optional)\n" \
-				 "  filter_mode (string) -- filtering used in upscaling, 'point' or 'linear' (default is 'linear')\n" \
+				 "  filter   (string) -- filtering used in upscaling, 'point' or 'linear' (default is 'linear')\n" \
 				 "Returns:  (none)"
 
 // Process
@@ -187,10 +172,7 @@ static PyObject* PyDepthNet_Process( PyDepthNet_Object* self, PyObject* args, Py
 	static char* kwlist[] = {"input", "output", "colormap", "filter", NULL};
 
 	if( !PyArg_ParseTupleAndKeywords(args, kwds, "O|Oss", kwlist, &input_capsule, &output_capsule, &colormap_str, &filter_str))
-	{
-		PyErr_SetString(PyExc_Exception, LOG_PY_INFERENCE "depthNet.Process() failed to parse args tuple");
 		return NULL;
-	}
 
 	// get pointers to image data
 	PyCudaImage* input_img = PyCUDA_GetImage(input_capsule);
@@ -250,9 +232,9 @@ static PyObject* PyDepthNet_Process( PyDepthNet_Object* self, PyObject* args, Py
 
 #define DOC_VISUALIZE "Visualize the raw depth field into a colorized RGB/RGBA depth map.\n\n" \
 				  "Parameters:\n" \
-				  "  output (capsule) -- output CUDA memory capsule\n" \
+				  "  output (capsule)  -- output CUDA memory capsule\n" \
 				  "  colormap (string) -- colormap name (optional)\n" \
-				  "  filter_mode (string) -- filtering used in upscaling, 'point' or 'linear' (default is 'linear')\n" \
+				  "  filter   (string) -- filtering used in upscaling, 'point' or 'linear' (default is 'linear')\n" \
 				  "Returns:  (none)"
 
 // Visualize
@@ -273,10 +255,7 @@ static PyObject* PyDepthNet_Visualize( PyDepthNet_Object* self, PyObject* args, 
 	static char* kwlist[] = {"output", "colormap", "filter", NULL};
 
 	if( !PyArg_ParseTupleAndKeywords(args, kwds, "O|ss", kwlist, &output_capsule, &colormap_str, &filter_str))
-	{
-		PyErr_SetString(PyExc_Exception, LOG_PY_INFERENCE "depthNet.Process() failed to parse args tuple");
 		return NULL;
-	}
 
 	// parse flags
 	const cudaColormapType colormap = cudaColormapFromStr(colormap_str);

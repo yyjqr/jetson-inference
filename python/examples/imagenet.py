@@ -25,16 +25,17 @@ import sys
 import argparse
 
 from jetson_inference import imageNet
-from jetson_utils import videoSource, videoOutput, logUsage, cudaFont
+from jetson_utils import videoSource, videoOutput, cudaFont, Log
 
 # parse the command line
 parser = argparse.ArgumentParser(description="Classify a live camera stream using an image recognition DNN.", 
                                  formatter_class=argparse.RawTextHelpFormatter, 
-                                 epilog=imageNet.Usage() + videoSource.Usage() + videoOutput.Usage() + logUsage())
+                                 epilog=imageNet.Usage() + videoSource.Usage() + videoOutput.Usage() + Log.Usage())
 
-parser.add_argument("input_URI", type=str, default="", nargs='?', help="URI of the input stream")
-parser.add_argument("output_URI", type=str, default="", nargs='?', help="URI of the output stream")
+parser.add_argument("input", type=str, default="", nargs='?', help="URI of the input stream")
+parser.add_argument("output", type=str, default="", nargs='?', help="URI of the output stream")
 parser.add_argument("--network", type=str, default="googlenet", help="pre-trained model to load (see below for options)")
+parser.add_argument("--topK", type=int, default=1, help="show the topK number of class predictions (default: 1)")
 
 is_headless = ["--headless"] if sys.argv[0].find('console.py') != -1 else [""]
 
@@ -55,33 +56,43 @@ net = imageNet(args.network, sys.argv)
 #                 input_blob="input_0", output_blob="output_0")
 
 # create video sources & outputs
-input = videoSource(args.input_URI, argv=sys.argv)
-output = videoOutput(args.output_URI, argv=sys.argv+is_headless)
+input = videoSource(args.input, argv=sys.argv)
+output = videoOutput(args.output, argv=sys.argv+is_headless)
 font = cudaFont()
 
-# process frames until the user exits
+# process frames until EOS or the user exits
 while True:
-	# capture the next image
-	img = input.Capture()
+    # capture the next image
+    img = input.Capture()
 
-	# classify the image
-	class_id, confidence = net.Classify(img)
+    if img is None: # timeout
+        continue  
 
-	# find the object description
-	class_desc = net.GetClassDesc(class_id)
+    # classify the image and get the topK predictions
+    # if you only want the top class, you can simply run:
+    #   class_id, confidence = net.Classify(img)
+    predictions = net.Classify(img, topK=args.topK)
 
-	# overlay the result on the image	
-	font.OverlayText(img, img.width, img.height, "{:05.2f}% {:s}".format(confidence * 100, class_desc), 5, 5, font.White, font.Gray40)
-	
-	# render the image
-	output.Render(img)
+    # draw predicted class labels
+    for n, (classID, confidence) in enumerate(predictions):
+        classLabel = net.GetClassLabel(classID)
+        confidence *= 100.0
 
-	# update the title bar
-	output.SetStatus("{:s} | Network {:.0f} FPS".format(net.GetNetworkName(), net.GetNetworkFPS()))
+        print(f"imagenet:  {confidence:05.2f}% class #{classID} ({classLabel})")
 
-	# print out performance info
-	net.PrintProfilerTimes()
+        font.OverlayText(img, text=f"{confidence:05.2f}% {classLabel}", 
+                         x=5, y=5 + n * (font.GetSize() + 5),
+                         color=font.White, background=font.Gray40)
+                         
+    # render the image
+    output.Render(img)
 
-	# exit on input/output EOS
-	if not input.IsStreaming() or not output.IsStreaming():
-		break
+    # update the title bar
+    output.SetStatus("{:s} | Network {:.0f} FPS".format(net.GetNetworkName(), net.GetNetworkFPS()))
+
+    # print out performance info
+    net.PrintProfilerTimes()
+
+    # exit on input/output EOS
+    if not input.IsStreaming() or not output.IsStreaming():
+        break

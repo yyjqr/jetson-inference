@@ -24,6 +24,7 @@
 #include "videoOutput.h"
 
 #include "detectNet.h"
+#include "objectTracker.h"
 
 #include <signal.h>
 #include <iostream>
@@ -50,20 +51,22 @@ void sig_handler(int signo)
 int usage()
 {
 	printf("usage: detectnet [--help] [--network=NETWORK] [--threshold=THRESHOLD] ...\n");
-	printf("                 input_URI [output_URI]\n\n");
+	printf("                 input [output]\n\n");
 	printf("Locate objects in a video/image stream using an object detection DNN.\n");
 	printf("See below for additional arguments that may not be shown above.\n\n");
 	printf("positional arguments:\n");
-	printf("    input_URI       resource URI of input stream  (see videoSource below)\n");
-	printf("    output_URI      resource URI of output stream (see videoOutput below)\n\n");
+	printf("    input           resource URI of input stream  (see videoSource below)\n");
+	printf("    output          resource URI of output stream (see videoOutput below)\n\n");
 
 	printf("%s", detectNet::Usage());
+	printf("%s", objectTracker::Usage());
 	printf("%s", videoSource::Usage());
 	printf("%s", videoOutput::Usage());
 	printf("%s", Log::Usage());
 
 	return 0;
 }
+
 
 int main( int argc, char** argv )
 {
@@ -101,6 +104,7 @@ int main( int argc, char** argv )
 	 * create output stream
 	 */
 	videoOutput* output = videoOutput::Create(cmdLine, ARG_POSITION(1));
+<<<<<<< HEAD
 	std::cout <<"test videoOutput*"<< output->GetResource().string.c_str()<<std::endl;
 	std::string filePath = output->GetResource().string;
         std::string::size_type  filePos =filePath.find("file://");
@@ -108,7 +112,14 @@ int main( int argc, char** argv )
         std::string validFile = filePath.substr(filePos+7);
         std::cout <<"test filePos:"<< filePos <<"\n file:" << validFile<<std::endl;
         if( !output )
+=======
+	
+	if( !output )
+	{
+>>>>>>> 3c9b259a11c3fa3938e1276b186d2065145fe795
 		LogError("detectnet:  failed to create output stream\n");	
+		return 1;
+	}
 	
 
 	/*
@@ -131,17 +142,16 @@ int main( int argc, char** argv )
 	 */
 	while( !signal_recieved )
 	{
-		// capture next image image
+		// capture next image
 		uchar3* image = NULL;
-
-		if( !input->Capture(&image, 1000) )
+		int status = 0;
+		
+		if( !input->Capture(&image, &status) )
 		{
-			// check for EOS
-			if( !input->IsStreaming() )
-				break; 
-
-			LogError("detectnet:  failed to capture video frame\n");
-			continue;
+			if( status == videoSource::TIMEOUT )
+				continue;
+			
+			break; // EOS
 		}
 
 		// detect objects in the frame
@@ -164,6 +174,7 @@ int main( int argc, char** argv )
                         //LogVerbose("call system cmd \'ls -alh\',ret is%d\n\n",ret);
 			for( int n=0; n < numDetections; n++ )
 			{
+<<<<<<< HEAD
 				LogVerbose("detected obj %i  class #%u (%s)  confidence=%f\n", n, detections[n].ClassID, net->GetClassDesc(detections[n].ClassID), detections[n].Confidence);
 				LogVerbose("bounding box %i  (%f, %f)  (%f, %f)  w=%f  h=%f\n", n, detections[n].Left, detections[n].Top, detections[n].Right, detections[n].Bottom, detections[n].Width(), detections[n].Height()); 
                                if(numDetections > 0)
@@ -176,6 +187,14 @@ int main( int argc, char** argv )
                                     sleepTime(12,0);
 				}
                          }
+=======
+				LogVerbose("\ndetected obj %i  class #%u (%s)  confidence=%f\n", n, detections[n].ClassID, net->GetClassDesc(detections[n].ClassID), detections[n].Confidence);
+				LogVerbose("bounding box %i  (%.2f, %.2f)  (%.2f, %.2f)  w=%.2f  h=%.2f\n", n, detections[n].Left, detections[n].Top, detections[n].Right, detections[n].Bottom, detections[n].Width(), detections[n].Height()); 
+			
+				if( detections[n].TrackID >= 0 ) // is this a tracked object?
+					LogVerbose("tracking  ID %i  status=%i  frames=%i  lost=%i\n", detections[n].TrackID, detections[n].TrackStatus, detections[n].TrackFrames, detections[n].TrackLost);
+			}
+>>>>>>> 3c9b259a11c3fa3938e1276b186d2065145fe795
 		}	
 
 		// render outputs
@@ -190,7 +209,7 @@ int main( int argc, char** argv )
 
 			// check if the user quit
 			if( !output->IsStreaming() )
-				signal_recieved = true;
+				break;
 		}
 
 		// print out timing info

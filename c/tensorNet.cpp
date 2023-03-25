@@ -1114,7 +1114,8 @@ bool tensorNet::LoadNetwork( const char* prototxt_path_, const char* model_path_
 
 		mModelType = model_fmt;
 		mModelPath = model_path;
-
+		mModelFile = pathFilename(mModelPath);
+		
 		LogSuccess(LOG_TRT "device %s, initialized %s\n", deviceTypeToStr(device), mModelPath.c_str());	
 		return true;
 	}
@@ -1227,6 +1228,7 @@ bool tensorNet::LoadNetwork( const char* prototxt_path_, const char* model_path_
 
 	mPrototxtPath     = prototxt_path;
 	mModelPath        = model_path;
+	mModelFile        = pathFilename(mModelPath);
 	mPrecision        = precision;
 	mAllowGPUFallback = allowGPUFallback;
 	mMaxBatchSize 	   = maxBatchSize;
@@ -1307,7 +1309,7 @@ bool tensorNet::LoadEngine( nvinfer1::ICudaEngine* engine,
 	if( !engine )
 		return NULL;
 
-		nvinfer1::IExecutionContext* context = engine->createExecutionContext();
+	nvinfer1::IExecutionContext* context = engine->createExecutionContext();
 	
 	if( !context )
 	{
@@ -1878,7 +1880,10 @@ static bool validateClassColors( float4* colors, int numLoaded, int expectedClas
 			LogWarning(LOG_TRT "filling in remaining %i class colors with default colors\n", (expectedClasses - numLoaded));
 	
 			for( int n=numLoaded; n < expectedClasses; n++ )
+			{
 				colors[n] = tensorNet::GenerateColor(n, defaultAlpha);
+				//LogVerbose(LOG_TRT "class color %i  (%f %f %f %f\n", n, colors[n].x, colors[n].y, colors[n].z, colors[n].w);
+			}
 		}
 	}
 	else if( numLoaded == 0 )
