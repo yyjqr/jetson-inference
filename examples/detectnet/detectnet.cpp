@@ -104,7 +104,12 @@ int main( int argc, char** argv )
 	 * create output stream
 	 */
 	videoOutput* output = videoOutput::Create(cmdLine, ARG_POSITION(1));
-	
+	std::cout <<"test videoOutput*"<< output->GetResource().string.c_str()<<std::endl;
+	std::string filePath = output->GetResource().string;
+    std::string::size_type  filePos =filePath.find("file://");
+        
+    std::string validFile = filePath.substr(filePos+7);
+    std::cout <<"test filePos:"<< filePos <<"\n Img file:" << validFile<<std::endl;
 	if( !output )
 	{
 		LogError("detectnet:  failed to create output stream\n");	
@@ -125,7 +130,7 @@ int main( int argc, char** argv )
 
 	// parse overlay flags
 	const uint32_t overlayFlags = detectNet::OverlayFlagsFromStr(cmdLine.GetString("overlay", "box,labels,conf"));
-	
+	const int  checkAndSendTimes = 5;
 
 	/*
 	 * processing loop
@@ -135,7 +140,7 @@ int main( int argc, char** argv )
 		// capture next image
 		uchar3* image = NULL;
 		int status = 0;
-		
+		int  recogTimes = 0;
 		if( !input->Capture(&image, &status) )
 		{
 			if( status == videoSource::TIMEOUT )
@@ -152,16 +157,9 @@ int main( int argc, char** argv )
 		if( numDetections > 0 )
 		{
 			LogVerbose("%i objects detected\n", numDetections);
-		        char cmd_buf[150]={0};
-                        sprintf(cmd_buf,"sendDetectImg -i %s",validFile.c_str());
-                        //int ret=system("sendDetectImg");
-                       /* if (detections[0].Confidence >0.7 &&numDetections > 1){
-                        int ret=system(cmd_buf);
-                        LogVerbose("call system cmd,confidence:%f, ret is%d\n\n",detections[0].Confidence, ret);
-                        sleepTime(12,0); //6 seconds
-                        }*/
-                        //ret=system("ls -alh");
-                        //LogVerbose("call system cmd \'ls -alh\',ret is%d\n\n",ret);
+		    char cmd_buf[150]={0};
+            sprintf(cmd_buf,"sendDetectImg -i %s",validFile.c_str());
+                       
 			for( int n=0; n < numDetections; n++ )
 			{
 				LogVerbose("\ndetected obj %i  class #%u (%s)  confidence=%f\n", n, detections[n].ClassID, net->GetClassDesc(detections[n].ClassID), detections[n].Confidence);
@@ -169,6 +167,18 @@ int main( int argc, char** argv )
 			
 				if( detections[n].TrackID >= 0 ) // is this a tracked object?
 					LogVerbose("tracking  ID %i  status=%i  frames=%i  lost=%i\n", detections[n].TrackID, detections[n].TrackStatus, detections[n].TrackFrames, detections[n].TrackLost);
+			    
+                if((detections[0].Confidence > 0.9)|| \
+                    (numDetections > 1 && detections[n].ClassID == 1 &&detections[n].Confidence > 0.65)) 
+                    {
+					   //  sendEmail. classID =1 ,people  //20221210 --->202303
+                            if(recogTimes%checkAndSendTimes == 0){
+								int ret=system(cmd_buf);
+								LogVerbose("call system cmd,detect confidence:%f, ret is%d\n\n",detections[0].Confidence, ret);
+								sleepTime(6,0);
+							}
+							recogTimes++;
+				    }
 			}
 		}	
 
