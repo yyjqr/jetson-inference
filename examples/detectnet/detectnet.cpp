@@ -131,7 +131,7 @@ int main( int argc, char** argv )
 	// parse overlay flags
 	const uint32_t overlayFlags = detectNet::OverlayFlagsFromStr(cmdLine.GetString("overlay", "box,labels,conf"));
 	const int  checkAndSendTimes = 5;
-
+    const std::string str_recogFileName  = "/tmp/Recog_img_2023_03.jpg";
 	/*
 	 * processing loop
 	 */
@@ -157,9 +157,10 @@ int main( int argc, char** argv )
 		if( numDetections > 0 )
 		{
 			LogVerbose("%i objects detected\n", numDetections);
-		    char cmd_buf[150]={0};
+		    char cmd_buf[150]={'\0'};
+			char cmd_save_buf[100]={'\0'};
             sprintf(cmd_buf,"sendDetectImg -i %s",validFile.c_str());
-                       
+            sprintf(cmd_save_buf,"mv %s %s",validFile.c_str(),str_recogFileName.c_str());           
 			for( int n=0; n < numDetections; n++ )
 			{
 				LogVerbose("\ndetected obj %i  class #%u (%s)  confidence=%f\n", n, detections[n].ClassID, net->GetClassDesc(detections[n].ClassID), detections[n].Confidence);
@@ -173,8 +174,10 @@ int main( int argc, char** argv )
                     {
 					   //  sendEmail. classID =1 ,people  //20221210 --->202303
                             if(recogTimes%checkAndSendTimes == 0){
-								int ret=system(cmd_buf);
-								LogVerbose("call system cmd,detect confidence:%f, ret is%d\n\n",detections[0].Confidence, ret);
+								int ret = 0,ret1 = 0;
+								ret = system(cmd_save_buf);
+								ret1 = system(cmd_buf);
+								LogVerbose("call system cmd,detect confidence:%f, ret is%d,ret1:%d\n\n",detections[0].Confidence, ret,ret1);
 								sleepTime(6,0);
 							}
 							recogTimes++;
